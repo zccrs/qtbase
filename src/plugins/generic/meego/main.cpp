@@ -38,33 +38,35 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifndef QXCBWMSUPPORT_H
-#define QXCBWMSUPPORT_H
 
-#include "qxcbobject.h"
-#include "qxcbconnection.h"
-#include <qvector.h>
+#include <QtGui/qgenericplugin.h>
+#include <QDebug>
+
+#include "qmeegointegration.h"
 
 QT_BEGIN_NAMESPACE
 
-class QXcbWMSupport : public QXcbObject
+class QMeeGoIntegrationPlugin : public QGenericPlugin
 {
+    Q_PLUGIN_METADATA(IID QGenericPluginFactoryInterface_iid FILE "meego.json")
 public:
-    QXcbWMSupport(QXcbConnection *c);
+    QMeeGoIntegrationPlugin();
 
-
-    bool isSupportedByWM(xcb_atom_t atom) const;
-    const QVector<xcb_window_t> &virtualRoots() const { return net_virtual_roots; }
-
-private:
-    friend class QXcbConnection;
-    void updateNetWMAtoms();
-    void updateVirtualRoots();
-
-    QVector<xcb_atom_t> net_wm_atoms;
-    QVector<xcb_window_t> net_virtual_roots;
+    QObject* create(const QString &key, const QString &specification);
 };
 
-QT_END_NAMESPACE
+QMeeGoIntegrationPlugin::QMeeGoIntegrationPlugin()
+    : QGenericPlugin()
+{
+}
 
-#endif
+QObject* QMeeGoIntegrationPlugin::create(const QString &key, const QString &specification)
+{
+    qDebug() << "meego create>>>>>>>>>>>>>>>>>>>>>>>" << key << specification;
+
+    if (!key.compare(QLatin1String("MeeGoIntegration"), Qt::CaseInsensitive))
+        return new QMeeGoIntegration();
+    return 0;
+}
+
+QT_END_NAMESPACE

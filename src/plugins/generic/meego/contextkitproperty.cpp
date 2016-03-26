@@ -38,33 +38,48 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifndef QXCBWMSUPPORT_H
-#define QXCBWMSUPPORT_H
 
-#include "qxcbobject.h"
-#include "qxcbconnection.h"
-#include <qvector.h>
+#include "contextkitproperty.h"
 
-QT_BEGIN_NAMESPACE
+#include <QDBusReply>
+#include <QDebug>
 
-class QXcbWMSupport : public QXcbObject
+static QString objectPathForProperty(const QString& property)
 {
-public:
-    QXcbWMSupport(QXcbConnection *c);
+    QString path = property;
+    if (!path.startsWith(QLatin1Char('/'))) {
+        path.replace(QLatin1Char('.'), QLatin1Char('/'));
+        path.prepend(QLatin1String("/org/maemo/contextkit/"));
+    }
+    return path;
+}
 
+QContextKitProperty::QContextKitProperty(const QString& serviceName, const QString& propertyName)
+    : propertyInterface(serviceName, objectPathForProperty(propertyName),
+                        QLatin1String("org.maemo.contextkit.Property"), QDBusConnection::systemBus())
+{
+    propertyInterface.call("Subscribe");
+    connect(&propertyInterface, SIGNAL(ValueChanged(QVariantList,qulonglong)),
+            this, SLOT(cacheValue(QVariantList,qulonglong)));
 
-    bool isSupportedByWM(xcb_atom_t atom) const;
-    const QVector<xcb_window_t> &virtualRoots() const { return net_virtual_roots; }
+    QDBusMessage reply = propertyInterface.call("Get");
+    if (reply.type() == QDBusMessage::ReplyMessage)
+        cachedValue = qdbus_cast<QList<QVariant> >(reply.arguments().value(0)).value(0);
+}
 
-private:
-    friend class QXcbConnection;
-    void updateNetWMAtoms();
-    void updateVirtualRoots();
+QContextKitProperty::~QContextKitProperty()
+{
+    propertyInterface.call("Unsubscribe");
+}
 
-    QVector<xcb_atom_t> net_wm_atoms;
-    QVector<xcb_window_t> net_virtual_roots;
-};
+QVariant QContextKitProperty::value() const
+{
+    return cachedValue;
+}
 
-QT_END_NAMESPACE
+void QContextKitProperty::cacheValue(const QVariantList& values, qulonglong)
+{
+    cachedValue = values.value(0);
+    emit valueChanged(cachedValue);
+}
 
-#endif

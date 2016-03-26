@@ -1,31 +1,39 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
+**
 **
 ** $QT_END_LICENSE$
 **
@@ -49,9 +57,6 @@
 #include <qdebug.h>
 #include <qpainter.h>
 #include <qscreen.h>
-#include <QtGui/private/qhighdpiscaling_p.h>
-#include <qpa/qplatformgraphicsbuffer.h>
-#include <private/qimage_p.h>
 
 #include <algorithm>
 QT_BEGIN_NAMESPACE
@@ -63,11 +68,7 @@ public:
     ~QXcbShmImage() { destroy(); }
 
     QImage *image() { return &m_qimage; }
-    QPlatformGraphicsBuffer *graphicsBuffer() { return m_graphics_buffer; }
-
     QSize size() const { return m_qimage.size(); }
-
-    bool hasAlpha() const { return m_hasAlpha; }
 
     void put(xcb_window_t window, const QPoint &dst, const QRect &source);
     void preparePaint(const QRegion &region);
@@ -80,49 +81,15 @@ private:
     xcb_image_t *m_xcb_image;
 
     QImage m_qimage;
-    QPlatformGraphicsBuffer *m_graphics_buffer;
 
     xcb_gcontext_t m_gc;
     xcb_window_t m_gc_window;
 
     QRegion m_dirty;
-
-    bool m_hasAlpha;
-};
-
-class QXcbShmGraphicsBuffer : public QPlatformGraphicsBuffer
-{
-public:
-    QXcbShmGraphicsBuffer(QImage *image)
-        : QPlatformGraphicsBuffer(image->size(), QImage::toPixelFormat(image->format()))
-        , m_access_lock(QPlatformGraphicsBuffer::None)
-        , m_image(image)
-    { }
-
-    bool doLock(AccessTypes access, const QRect &rect) Q_DECL_OVERRIDE
-    {
-        Q_UNUSED(rect);
-        if (access & ~(QPlatformGraphicsBuffer::SWReadAccess | QPlatformGraphicsBuffer::SWWriteAccess))
-            return false;
-
-        m_access_lock |= access;
-        return true;
-    }
-    void doUnlock() Q_DECL_OVERRIDE { m_access_lock = None; }
-
-    const uchar *data() const Q_DECL_OVERRIDE { return m_image->bits(); }
-    uchar *data() Q_DECL_OVERRIDE { return m_image->bits(); }
-    int bytesPerLine() const Q_DECL_OVERRIDE { return m_image->bytesPerLine(); }
-
-    Origin origin() const Q_DECL_OVERRIDE { return QPlatformGraphicsBuffer::OriginTopLeft; }
-private:
-    AccessTypes m_access_lock;
-    QImage *m_image;
 };
 
 QXcbShmImage::QXcbShmImage(QXcbScreen *screen, const QSize &size, uint depth, QImage::Format format)
     : QXcbObject(screen->connection())
-    , m_graphics_buffer(Q_NULLPTR)
     , m_gc(0)
     , m_gc_window(0)
 {
@@ -151,8 +118,8 @@ QXcbShmImage::QXcbShmImage(QXcbScreen *screen, const QSize &size, uint depth, QI
 
     int id = shmget(IPC_PRIVATE, segmentSize, IPC_CREAT | 0600);
     if (id == -1)
-        qWarning("QXcbShmImage: shmget() failed (%d: %s) for size %d (%dx%d)",
-                 errno, strerror(errno), segmentSize, size.width(), size.height());
+        qWarning("QXcbShmImage: shmget() failed (%d) for size %d (%dx%d)",
+                 errno, segmentSize, size.width(), size.height());
     else
         m_shm_info.shmid = id;
     m_shm_info.shmaddr = m_xcb_image->data = (quint8 *)shmat (m_shm_info.shmid, 0, 0);
@@ -163,7 +130,7 @@ QXcbShmImage::QXcbShmImage(QXcbScreen *screen, const QSize &size, uint depth, QI
     xcb_generic_error_t *error = NULL;
     if (shm_present)
         error = xcb_request_check(xcb_connection(), xcb_shm_attach_checked(xcb_connection(), m_shm_info.shmseg, m_shm_info.shmid, false));
-    if (!shm_present || error || id == -1) {
+    if (!shm_present || error) {
         free(error);
 
         shmdt(m_shm_info.shmaddr);
@@ -177,12 +144,7 @@ QXcbShmImage::QXcbShmImage(QXcbScreen *screen, const QSize &size, uint depth, QI
             qWarning() << "QXcbBackingStore: Error while marking the shared memory segment to be destroyed";
     }
 
-    m_hasAlpha = QImage::toPixelFormat(format).alphaUsage() == QPixelFormat::UsesAlpha;
-    if (!m_hasAlpha)
-        format = qt_maybeAlphaVersionWithSameDepth(format);
-
     m_qimage = QImage( (uchar*) m_xcb_image->data, m_xcb_image->width, m_xcb_image->height, m_xcb_image->stride, format);
-    m_graphics_buffer = new QXcbShmGraphicsBuffer(&m_qimage);
 }
 
 void QXcbShmImage::destroy()
@@ -190,6 +152,8 @@ void QXcbShmImage::destroy()
     const int segmentSize = m_xcb_image ? (m_xcb_image->stride * m_xcb_image->height) : 0;
     if (segmentSize && m_shm_info.shmaddr)
         Q_XCB_CALL(xcb_shm_detach(xcb_connection(), m_shm_info.shmseg));
+
+    xcb_image_destroy(m_xcb_image);
 
     if (segmentSize) {
         if (m_shm_info.shmaddr) {
@@ -200,12 +164,8 @@ void QXcbShmImage::destroy()
         }
     }
 
-    xcb_image_destroy(m_xcb_image);
-
     if (m_gc)
         Q_XCB_CALL(xcb_free_gc(xcb_connection(), m_gc));
-    delete m_graphics_buffer;
-    m_graphics_buffer = Q_NULLPTR;
 }
 
 void QXcbShmImage::put(xcb_window_t window, const QPoint &target, const QRect &source)
@@ -313,26 +273,20 @@ QXcbBackingStore::~QXcbBackingStore()
 
 QPaintDevice *QXcbBackingStore::paintDevice()
 {
-    if (!m_image)
-        return 0;
-    return m_rgbImage.isNull() ? m_image->image() : &m_rgbImage;
+    return m_image ? m_image->image() : 0;
 }
 
 void QXcbBackingStore::beginPaint(const QRegion &region)
 {
-    if (!m_image && !m_size.isEmpty())
-        resize(m_size, QRegion());
-
     if (!m_image)
         return;
-    m_size = QSize();
-    m_paintRegion = region;
-    m_image->preparePaint(m_paintRegion);
 
-    if (m_image->hasAlpha()) {
-        QPainter p(paintDevice());
+    m_image->preparePaint(region);
+
+    if (m_image->image()->hasAlphaChannel()) {
+        QPainter p(m_image->image());
         p.setCompositionMode(QPainter::CompositionMode_Source);
-        const QVector<QRect> rects = m_paintRegion.rects();
+        const QVector<QRect> rects = region.rects();
         const QColor blank = Qt::transparent;
         for (QVector<QRect>::const_iterator it = rects.begin(); it != rects.end(); ++it) {
             p.fillRect(*it, blank);
@@ -340,34 +294,9 @@ void QXcbBackingStore::beginPaint(const QRegion &region)
     }
 }
 
-void QXcbBackingStore::endPaint()
-{
-    QXcbWindow *platformWindow = static_cast<QXcbWindow *>(window()->handle());
-    if (!platformWindow || !platformWindow->imageNeedsRgbSwap())
-        return;
-
-    // Slow path: the paint device was m_rgbImage. Now copy with swapping red
-    // and blue into m_image.
-    const QVector<QRect> rects = m_paintRegion.rects();
-    if (rects.isEmpty())
-        return;
-    QPainter p(m_image->image());
-    for (QVector<QRect>::const_iterator it = rects.begin(); it != rects.end(); ++it) {
-        const QRect rect = *it;
-        p.drawImage(rect.topLeft(), m_rgbImage.copy(rect).rgbSwapped());
-    }
-}
-
-#ifndef QT_NO_OPENGL
 QImage QXcbBackingStore::toImage() const
 {
     return m_image && m_image->image() ? *m_image->image() : QImage();
-}
-#endif
-
-QPlatformGraphicsBuffer *QXcbBackingStore::graphicsBuffer() const
-{
-    return m_image ? m_image->graphicsBuffer() : Q_NULLPTR;
 }
 
 void QXcbBackingStore::flush(QWindow *window, const QRegion &region, const QPoint &offset)
@@ -378,7 +307,7 @@ void QXcbBackingStore::flush(QWindow *window, const QRegion &region, const QPoin
     QSize imageSize = m_image->size();
 
     QRegion clipped = region;
-    clipped &= QRect(QPoint(), QHighDpi::toNativePixels(window->size(), window));
+    clipped &= QRect(0, 0, window->width(), window->height());
     clipped &= QRect(0, 0, imageSize.width(), imageSize.height()).translated(-offset);
 
     QRect bounds = clipped.boundingRect();
@@ -395,10 +324,8 @@ void QXcbBackingStore::flush(QWindow *window, const QRegion &region, const QPoin
     }
 
     QVector<QRect> rects = clipped.rects();
-    for (int i = 0; i < rects.size(); ++i) {
-        QRect rect = QRect(rects.at(i).topLeft(), rects.at(i).size());
-        m_image->put(platformWindow->xcb_window(), rect.topLeft(), rect.translated(offset));
-    }
+    for (int i = 0; i < rects.size(); ++i)
+        m_image->put(platformWindow->xcb_window(), rects.at(i).topLeft(), rects.at(i).translated(offset));
 
     Q_XCB_NOOP(connection());
 
@@ -430,10 +357,10 @@ void QXcbBackingStore::resize(const QSize &size, const QRegion &)
 {
     if (m_image && size == m_image->size())
         return;
+
     Q_XCB_NOOP(connection());
 
-
-    QXcbScreen *screen = window()->screen() ? static_cast<QXcbScreen *>(window()->screen()->handle()) : 0;
+    QXcbScreen *screen = static_cast<QXcbScreen *>(window()->screen()->handle());
     QPlatformWindow *pw = window()->handle();
     if (!pw) {
         window()->create();
@@ -442,17 +369,7 @@ void QXcbBackingStore::resize(const QSize &size, const QRegion &)
     QXcbWindow* win = static_cast<QXcbWindow *>(pw);
 
     delete m_image;
-    if (!screen) {
-        m_image = 0;
-        m_size = size;
-        return;
-    }
     m_image = new QXcbShmImage(screen, size, win->depth(), win->imageFormat());
-    // Slow path for bgr888 VNC: Create an additional image, paint into that and
-    // swap R and B while copying to m_image after each paint.
-    if (win->imageNeedsRgbSwap()) {
-        m_rgbImage = QImage(size, win->imageFormat());
-    }
     Q_XCB_NOOP(connection());
 }
 
@@ -465,10 +382,10 @@ bool QXcbBackingStore::scroll(const QRegion &area, int dx, int dy)
 
     m_image->preparePaint(area);
 
-    QPoint delta(dx, dy);
     const QVector<QRect> rects = area.rects();
     for (int i = 0; i < rects.size(); ++i)
-        qt_scrollRectInImage(*m_image->image(), rects.at(i), delta);
+        qt_scrollRectInImage(*m_image->image(), rects.at(i), QPoint(dx, dy));
+
     return true;
 }
 

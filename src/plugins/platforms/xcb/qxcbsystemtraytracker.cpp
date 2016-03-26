@@ -1,31 +1,39 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
+**
 **
 ** $QT_END_LICENSE$
 **
@@ -59,18 +67,18 @@ QXcbSystemTrayTracker *QXcbSystemTrayTracker::create(QXcbConnection *connection)
     const xcb_atom_t trayAtom = connection->atom(QXcbAtom::_NET_SYSTEM_TRAY_OPCODE);
     if (!trayAtom)
         return 0;
-    const QByteArray netSysTray = QByteArrayLiteral("_NET_SYSTEM_TRAY_S") + QByteArray::number(connection->primaryScreenNumber());
+    const QByteArray netSysTray = QByteArrayLiteral("_NET_SYSTEM_TRAY_S") + QByteArray::number(connection->primaryScreen());
     const xcb_atom_t selection = connection->internAtom(netSysTray.constData());
     if (!selection)
         return 0;
-
-    return new QXcbSystemTrayTracker(connection, trayAtom, selection);
+    return new QXcbSystemTrayTracker(connection, trayAtom, selection, connection);
 }
 
 QXcbSystemTrayTracker::QXcbSystemTrayTracker(QXcbConnection *connection,
                                              xcb_atom_t trayAtom,
-                                             xcb_atom_t selection)
-    : QObject(connection)
+                                             xcb_atom_t selection,
+                                             QObject *parent)
+    : QObject(parent)
     , m_selection(selection)
     , m_trayAtom(trayAtom)
     , m_connection(connection)
@@ -125,7 +133,6 @@ xcb_window_t QXcbSystemTrayTracker::trayWindow()
 // does not work for the QWindow parented on the tray.
 QRect QXcbSystemTrayTracker::systemTrayWindowGlobalGeometry(xcb_window_t window) const
 {
-
     xcb_connection_t *conn = m_connection->xcb_connection();
     xcb_get_geometry_reply_t *geomReply =
         xcb_get_geometry_reply(conn, xcb_get_geometry(conn, window), 0);
@@ -146,8 +153,11 @@ QRect QXcbSystemTrayTracker::systemTrayWindowGlobalGeometry(xcb_window_t window)
 
 inline void QXcbSystemTrayTracker::emitSystemTrayWindowChanged()
 {
-    if (const QPlatformScreen *ps = m_connection->primaryScreen())
+    const int screen = m_connection->primaryScreen();
+    if (screen >= 0 && screen < m_connection->screens().size()) {
+        const QPlatformScreen *ps = m_connection->screens().at(screen);
         emit systemTrayWindowChanged(ps->screen());
+    }
 }
 
 // Client messages with the "MANAGER" atom on the root window indicate creation of a new tray.
@@ -162,43 +172,9 @@ void QXcbSystemTrayTracker::handleDestroyNotifyEvent(const xcb_destroy_notify_ev
 {
     if (event->window == m_trayWindow) {
         m_connection->removeWindowEventListener(m_trayWindow);
-        m_trayWindow = XCB_WINDOW_NONE;
+        m_trayWindow = 0;
         emitSystemTrayWindowChanged();
     }
-}
-
-bool QXcbSystemTrayTracker::visualHasAlphaChannel()
-{
-    if (m_trayWindow == XCB_WINDOW_NONE)
-        return false;
-
-    xcb_atom_t tray_atom = m_connection->atom(QXcbAtom::_NET_SYSTEM_TRAY_VISUAL);
-
-    // Get the xcb property for the _NET_SYSTEM_TRAY_VISUAL atom
-    xcb_get_property_cookie_t systray_atom_cookie;
-    xcb_get_property_reply_t *systray_atom_reply;
-
-    systray_atom_cookie = xcb_get_property_unchecked(m_connection->xcb_connection(), false, m_trayWindow,
-                                                    tray_atom, XCB_ATOM_VISUALID, 0, 1);
-    systray_atom_reply = xcb_get_property_reply(m_connection->xcb_connection(), systray_atom_cookie, 0);
-
-    if (!systray_atom_reply)
-        return false;
-
-    xcb_visualid_t systrayVisualId = XCB_NONE;
-    if (systray_atom_reply->value_len > 0 && xcb_get_property_value_length(systray_atom_reply) > 0) {
-        xcb_visualid_t * vids = (uint32_t *)xcb_get_property_value(systray_atom_reply);
-        systrayVisualId = vids[0];
-    }
-
-    free(systray_atom_reply);
-
-    if (systrayVisualId != XCB_NONE) {
-        quint8 depth = m_connection->primaryScreen()->depthOfVisual(systrayVisualId);
-        return depth == 32;
-    }
-
-    return false;
 }
 
 QT_END_NAMESPACE

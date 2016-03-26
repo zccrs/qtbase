@@ -1,31 +1,39 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
+**
 **
 ** $QT_END_LICENSE$
 **
@@ -52,13 +60,7 @@ typedef char *(*PtrXcursorLibraryGetTheme)(void *);
 typedef int (*PtrXcursorLibrarySetTheme)(void *, const char *);
 typedef int (*PtrXcursorLibraryGetDefaultSize)(void *);
 
-#if defined(XCB_USE_XLIB) && !defined(QT_NO_LIBRARY)
-#include <X11/Xlib.h>
-enum {
-    XCursorShape = CursorShape
-};
-#undef CursorShape
-
+#ifdef XCB_USE_XLIB
 static PtrXcursorLibraryLoadCursor ptrXcursorLibraryLoadCursor = 0;
 static PtrXcursorLibraryGetTheme ptrXcursorLibraryGetTheme = 0;
 static PtrXcursorLibrarySetTheme ptrXcursorLibrarySetTheme = 0;
@@ -300,7 +302,7 @@ QXcbCursor::QXcbCursor(QXcbConnection *conn, QXcbScreen *screen)
     const char *cursorStr = "cursor";
     xcb_open_font(xcb_connection(), cursorFont, strlen(cursorStr), cursorStr);
 
-#if defined(XCB_USE_XLIB) && !defined(QT_NO_LIBRARY)
+#ifdef XCB_USE_XLIB
     static bool function_ptrs_not_initialized = true;
     if (function_ptrs_not_initialized) {
         QLibrary xcursorLib(QLatin1String("Xcursor"), 1);
@@ -336,10 +338,8 @@ QXcbCursor::~QXcbCursor()
     if (!--cursorCount)
         xcb_close_font(conn, cursorFont);
 
-#ifndef QT_NO_CURSOR
     foreach (xcb_cursor_t cursor, m_cursorHash)
         xcb_free_cursor(conn, cursor);
-#endif
 }
 
 #ifndef QT_NO_CURSOR
@@ -491,8 +491,8 @@ xcb_cursor_t QXcbCursor::createNonStandardCursor(int cshape)
     return cursor;
 }
 
-#if defined(XCB_USE_XLIB) && !defined(QT_NO_LIBRARY)
-bool updateCursorTheme(void *dpy, const QByteArray &theme) {
+#ifdef XCB_USE_XLIB
+bool updateCursorTheme(void *dpy, const QByteArray theme) {
     if (!ptrXcursorLibraryGetTheme
             || !ptrXcursorLibrarySetTheme)
         return false;
@@ -504,7 +504,7 @@ bool updateCursorTheme(void *dpy, const QByteArray &theme) {
     return setTheme;
 }
 
- void QXcbCursor::cursorThemePropertyChanged(QXcbVirtualDesktop *screen, const QByteArray &name, const QVariant &property, void *handle)
+ void QXcbCursor::cursorThemePropertyChanged(QXcbScreen *screen, const QByteArray &name, const QVariant &property, void *handle)
 {
     Q_UNUSED(screen);
     Q_UNUSED(name);
@@ -535,7 +535,7 @@ static xcb_cursor_t loadCursor(void *dpy, int cshape)
     }
     return cursor;
 }
-#endif //XCB_USE_XLIB / QT_NO_LIBRARY
+#endif //XCB_USE_XLIB
 
 xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
 {
@@ -544,7 +544,7 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
     xcb_cursor_t cursor = XCB_NONE;
 
     // Try Xcursor first
-#if defined(XCB_USE_XLIB) && !defined(QT_NO_LIBRARY)
+#ifdef XCB_USE_XLIB
     if (cshape >= 0 && cshape <= Qt::LastCursor) {
         void *dpy = connection()->xlib_display();
         // special case for non-standard dnd-* cursors
@@ -560,12 +560,6 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
     }
     if (cursor)
         return cursor;
-    if (!cursor && cursorId) {
-        cursor = XCreateFontCursor(DISPLAY_FROM_XCB(this), cursorId);
-        if (cursor)
-            return cursor;
-    }
-
 #endif
 
     // Non-standard X11 cursors are created from bitmaps
@@ -607,33 +601,30 @@ xcb_cursor_t QXcbCursor::createBitmapCursor(QCursor *cursor)
 }
 #endif
 
-void QXcbCursor::queryPointer(QXcbConnection *c, QXcbVirtualDesktop **virtualDesktop, QPoint *pos, int *keybMask)
+void QXcbCursor::queryPointer(QXcbConnection *c, xcb_window_t *rootWin, QPoint *pos, int *keybMask)
 {
     if (pos)
         *pos = QPoint();
-
-    xcb_window_t root = c->primaryVirtualDesktop()->root();
-    xcb_query_pointer_cookie_t cookie = xcb_query_pointer(c->xcb_connection(), root);
-    xcb_generic_error_t *err = 0;
-    xcb_query_pointer_reply_t *reply = xcb_query_pointer_reply(c->xcb_connection(), cookie, &err);
-    if (!err && reply) {
-        if (virtualDesktop) {
-            foreach (QXcbVirtualDesktop *vd, c->virtualDesktops()) {
-                if (vd->root() == reply->root) {
-                    *virtualDesktop = vd;
-                    break;
-                }
-            }
+    xcb_screen_iterator_t it = xcb_setup_roots_iterator(c->setup());
+    while (it.rem) {
+        xcb_window_t root = it.data->root;
+        xcb_query_pointer_cookie_t cookie = xcb_query_pointer(c->xcb_connection(), root);
+        xcb_generic_error_t *err = 0;
+        xcb_query_pointer_reply_t *reply = xcb_query_pointer_reply(c->xcb_connection(), cookie, &err);
+        if (!err && reply) {
+            if (pos)
+                *pos = QPoint(reply->root_x, reply->root_y);
+            if (rootWin)
+                *rootWin = root;
+            if (keybMask)
+                *keybMask = reply->mask;
+            free(reply);
+            return;
         }
-        if (pos)
-            *pos = QPoint(reply->root_x, reply->root_y);
-        if (keybMask)
-            *keybMask = reply->mask;
+        free(err);
         free(reply);
-        return;
+        xcb_screen_next(&it);
     }
-    free(err);
-    free(reply);
 }
 
 QPoint QXcbCursor::pos() const
@@ -645,9 +636,9 @@ QPoint QXcbCursor::pos() const
 
 void QXcbCursor::setPos(const QPoint &pos)
 {
-    QXcbVirtualDesktop *virtualDesktop = Q_NULLPTR;
-    queryPointer(connection(), &virtualDesktop, 0);
-    xcb_warp_pointer(xcb_connection(), XCB_NONE, virtualDesktop->root(), 0, 0, 0, 0, pos.x(), pos.y());
+    xcb_window_t root = 0;
+    queryPointer(connection(), &root, 0);
+    xcb_warp_pointer(xcb_connection(), XCB_NONE, root, 0, 0, 0, 0, pos.x(), pos.y());
     xcb_flush(xcb_connection());
 }
 

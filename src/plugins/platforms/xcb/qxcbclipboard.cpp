@@ -1,31 +1,39 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
+**
 **
 ** $QT_END_LICENSE$
 **
@@ -84,7 +92,7 @@ public:
     }
 
 protected:
-    QStringList formats_sys() const Q_DECL_OVERRIDE
+    QStringList formats_sys() const
     {
         if (isEmpty())
             return QStringList();
@@ -97,7 +105,7 @@ protected:
             that->format_atoms = m_clipboard->getDataInFormat(modeAtom, m_clipboard->atom(QXcbAtom::TARGETS));
 
             if (format_atoms.size() > 0) {
-                const xcb_atom_t *targets = (const xcb_atom_t *) format_atoms.data();
+                xcb_atom_t *targets = (xcb_atom_t *) format_atoms.data();
                 int size = format_atoms.size() / sizeof(xcb_atom_t);
 
                 for (int i = 0; i < size; ++i) {
@@ -114,13 +122,13 @@ protected:
         return formatList;
     }
 
-    bool hasFormat_sys(const QString &format) const Q_DECL_OVERRIDE
+    bool hasFormat_sys(const QString &format) const
     {
         QStringList list = formats();
         return list.contains(format);
     }
 
-    QVariant retrieveData_sys(const QString &fmt, QVariant::Type requestedType) const Q_DECL_OVERRIDE
+    QVariant retrieveData_sys(const QString &fmt, QVariant::Type requestedType) const
     {
         if (fmt.isEmpty() || isEmpty())
             return QByteArray();
@@ -128,7 +136,7 @@ protected:
         (void)formats(); // trigger update of format list
 
         QVector<xcb_atom_t> atoms;
-        const xcb_atom_t *targets = (const xcb_atom_t *) format_atoms.data();
+        xcb_atom_t *targets = (xcb_atom_t *) format_atoms.data();
         int size = format_atoms.size() / sizeof(xcb_atom_t);
         atoms.reserve(size);
         for (int i = 0; i < size; ++i)
@@ -232,7 +240,7 @@ public:
     }
 
 protected:
-    void timerEvent(QTimerEvent *ev) Q_DECL_OVERRIDE
+    void timerEvent(QTimerEvent *ev)
     {
         if (ev->timerId() == abort_timer) {
             // this can happen when the X client we are sending data
@@ -275,8 +283,22 @@ QXcbClipboard::QXcbClipboard(QXcbConnection *c)
     m_clientClipboard[QClipboard::Selection] = 0;
     m_timestamp[QClipboard::Clipboard] = XCB_CURRENT_TIME;
     m_timestamp[QClipboard::Selection] = XCB_CURRENT_TIME;
-    m_owner = connection()->getQtSelectionOwner();
 
+    m_screen = connection()->screens().at(connection()->primaryScreen());
+
+    int x = 0, y = 0, w = 3, h = 3;
+
+    m_owner = xcb_generate_id(xcb_connection());
+    Q_XCB_CALL(xcb_create_window(xcb_connection(),
+                                 XCB_COPY_FROM_PARENT,            // depth -- same as root
+                                 m_owner,                        // window id
+                                 m_screen->screen()->root,                   // parent window id
+                                 x, y, w, h,
+                                 0,                               // border width
+                                 XCB_WINDOW_CLASS_INPUT_OUTPUT,   // window class
+                                 m_screen->screen()->root_visual, // visual
+                                 0,                               // value mask
+                                 0));                             // value list
 #ifndef QT_NO_DEBUG
     QByteArray ba("Qt clipboard window");
     Q_XCB_CALL(xcb_change_property(xcb_connection(),
@@ -339,7 +361,13 @@ void QXcbClipboard::incrTransactionPeeker(xcb_generic_event_t *ge, bool &accepte
 
 xcb_window_t QXcbClipboard::getSelectionOwner(xcb_atom_t atom) const
 {
-    return connection()->getSelectionOwner(atom);
+    xcb_connection_t *c = xcb_connection();
+    xcb_get_selection_owner_cookie_t cookie = xcb_get_selection_owner(c, atom);
+    xcb_get_selection_owner_reply_t *reply;
+    reply = xcb_get_selection_owner_reply(c, cookie, 0);
+    xcb_window_t win = reply->owner;
+    free(reply);
+    return win;
 }
 
 xcb_atom_t QXcbClipboard::atomForMode(QClipboard::Mode mode) const
@@ -442,16 +470,9 @@ bool QXcbClipboard::ownsMode(QClipboard::Mode mode) const
     return m_timestamp[mode] != XCB_CURRENT_TIME;
 }
 
-QXcbScreen *QXcbClipboard::screen() const
-{
-    return connection()->primaryScreen();
-}
-
 xcb_window_t QXcbClipboard::requestor() const
 {
-     QXcbScreen *platformScreen = screen();
-
-    if (!m_requestor && platformScreen) {
+    if (!m_requestor) {
         const int x = 0, y = 0, w = 3, h = 3;
         QXcbClipboard *that = const_cast<QXcbClipboard *>(this);
 
@@ -459,11 +480,11 @@ xcb_window_t QXcbClipboard::requestor() const
         Q_XCB_CALL(xcb_create_window(xcb_connection(),
                                      XCB_COPY_FROM_PARENT,            // depth -- same as root
                                      window,                        // window id
-                                     platformScreen->screen()->root,                   // parent window id
+                                     m_screen->screen()->root,                   // parent window id
                                      x, y, w, h,
                                      0,                               // border width
                                      XCB_WINDOW_CLASS_INPUT_OUTPUT,   // window class
-                                     platformScreen->screen()->root_visual, // visual
+                                     m_screen->screen()->root_visual, // visual
                                      0,                               // value mask
                                      0));                             // value list
 #ifndef QT_NO_DEBUG
@@ -718,9 +739,6 @@ void QXcbClipboard::handleSelectionRequest(xcb_selection_request_event_t *req)
 void QXcbClipboard::handleXFixesSelectionRequest(xcb_xfixes_selection_notify_event_t *event)
 {
     QClipboard::Mode mode = modeForAtom(event->selection);
-    if (mode > QClipboard::Selection)
-        return;
-
     // here we care only about the xfixes events that come from non Qt processes
     if (event->owner != XCB_NONE && event->owner != owner()) {
         if (!m_xClipboard[mode]) {
@@ -729,9 +747,7 @@ void QXcbClipboard::handleXFixesSelectionRequest(xcb_xfixes_selection_notify_eve
             m_xClipboard[mode]->reset();
         }
         emitChanged(mode);
-    } else if (event->subtype == XCB_XFIXES_SELECTION_EVENT_SELECTION_CLIENT_CLOSE ||
-               event->subtype == XCB_XFIXES_SELECTION_EVENT_SELECTION_WINDOW_DESTROY)
-        emitChanged(mode);
+    }
 }
 
 

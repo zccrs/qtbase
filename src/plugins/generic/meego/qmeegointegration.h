@@ -38,33 +38,31 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifndef QXCBWMSUPPORT_H
-#define QXCBWMSUPPORT_H
 
-#include "qxcbobject.h"
-#include "qxcbconnection.h"
-#include <qvector.h>
+#ifndef QMEEGOINTEGRATION_H
+#define QMEEGOINTEGRATION_H
+
+#include <QObject>
+#include <QDBusInterface>
+
+#include "contextkitproperty.h"
 
 QT_BEGIN_NAMESPACE
 
-class QXcbWMSupport : public QXcbObject
+class QMeeGoIntegration : public QObject
 {
+    Q_OBJECT
 public:
-    QXcbWMSupport(QXcbConnection *c);
+    QMeeGoIntegration();
+    ~QMeeGoIntegration();
 
-
-    bool isSupportedByWM(xcb_atom_t atom) const;
-    const QVector<xcb_window_t> &virtualRoots() const { return net_virtual_roots; }
+private Q_SLOTS:
+    void updateScreenOrientation(const QVariant& topEdgeValue);
 
 private:
-    friend class QXcbConnection;
-    void updateNetWMAtoms();
-    void updateVirtualRoots();
-
-    QVector<xcb_atom_t> net_wm_atoms;
-    QVector<xcb_window_t> net_virtual_roots;
+    QContextKitProperty screenTopEdge;
 };
 
 QT_END_NAMESPACE
 
-#endif
+#endif // QMEEGOINTEGRATION_H

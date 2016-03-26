@@ -38,32 +38,33 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifndef QXCBWMSUPPORT_H
-#define QXCBWMSUPPORT_H
 
-#include "qxcbobject.h"
-#include "qxcbconnection.h"
-#include <qvector.h>
+#ifdef XCB_USE_XLIB
+
+#include "qxlibconvenience.h"
+
+// Some Xlib headers are heavy macro namespace polluters and conflict with Qt types.
+// This unit makes it easier to deal with them by encapsulating these includes in this .cpp.
+#include <X11/Xutil.h>
 
 QT_BEGIN_NAMESPACE
 
-class QXcbWMSupport : public QXcbObject
+xcb_keysym_t q_XLookupString(void *display, xcb_window_t window, xcb_window_t root, uint state, xcb_keycode_t code, int type, QByteArray *chars)
 {
-public:
-    QXcbWMSupport(QXcbConnection *c);
-
-
-    bool isSupportedByWM(xcb_atom_t atom) const;
-    const QVector<xcb_window_t> &virtualRoots() const { return net_virtual_roots; }
-
-private:
-    friend class QXcbConnection;
-    void updateNetWMAtoms();
-    void updateVirtualRoots();
-
-    QVector<xcb_atom_t> net_wm_atoms;
-    QVector<xcb_window_t> net_virtual_roots;
-};
+    KeySym sym = 0;
+    chars->resize(512);
+    XKeyEvent event;
+    memset(&event, 0, sizeof(event));
+    event.type = type;
+    event.display = static_cast<Display*>(display);
+    event.window = window;
+    event.root = root;
+    event.state = state;
+    event.keycode = code;
+    int count = XLookupString(&event, chars->data(), chars->size(), &sym, 0);
+    chars->resize(count);
+    return sym;
+}
 
 QT_END_NAMESPACE
 

@@ -3,7 +3,7 @@
 ** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
-** This file is part of the plugins of the Qt Toolkit.
+** This file is part of the qmake spec of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
@@ -38,33 +38,5 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifndef QXCBWMSUPPORT_H
-#define QXCBWMSUPPORT_H
 
-#include "qxcbobject.h"
-#include "qxcbconnection.h"
-#include <qvector.h>
-
-QT_BEGIN_NAMESPACE
-
-class QXcbWMSupport : public QXcbObject
-{
-public:
-    QXcbWMSupport(QXcbConnection *c);
-
-
-    bool isSupportedByWM(xcb_atom_t atom) const;
-    const QVector<xcb_window_t> &virtualRoots() const { return net_virtual_roots; }
-
-private:
-    friend class QXcbConnection;
-    void updateNetWMAtoms();
-    void updateVirtualRoots();
-
-    QVector<xcb_atom_t> net_wm_atoms;
-    QVector<xcb_window_t> net_virtual_roots;
-};
-
-QT_END_NAMESPACE
-
-#endif
+#include "../../linux-g++/qplatformdefs.h"

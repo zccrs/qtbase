@@ -1,8 +1,7 @@
 #
 # Statically compile in code for
 # libxcb-fixes, libxcb-randr, libxcb-shm, libxcb-sync, libxcb-image,
-# libxcb-keysyms, libxcb-icccm, libxcb-renderutil, libxcb-xkb,
-# libxcb-xinerama
+# libxcb-keysyms, libxcb-icccm, libxcb-renderutil, libxcb-xkb
 #
 CONFIG += static
 load(qt_helper_lib)
@@ -10,9 +9,6 @@ load(qt_helper_lib)
 XCB_DIR = ../../../../3rdparty/xcb
 
 INCLUDEPATH += $$XCB_DIR/include $$XCB_DIR/include/xcb $$XCB_DIR/sysinclude
-
-QMAKE_CXXFLAGS += $$QMAKE_CFLAGS_XCB
-QMAKE_CFLAGS += $$QMAKE_CFLAGS_XCB
 
 # ignore compiler warnings in 3rdparty code
 QMAKE_CFLAGS_STATIC_LIB+=-w
@@ -29,8 +25,7 @@ SOURCES += \
     $$LIBXCB_DIR/sync.c \
     $$LIBXCB_DIR/render.c \
     $$LIBXCB_DIR/shape.c \
-    $$LIBXCB_DIR/xkb.c \
-    $$LIBXCB_DIR/xinerama.c
+    $$LIBXCB_DIR/xkb.c
 
 #
 # xcb-util

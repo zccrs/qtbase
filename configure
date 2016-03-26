@@ -746,6 +746,7 @@ XPLATFORM_MAC=no        # Whether target platform is OS X or iOS
 XPLATFORM_IOS=no        # Whether target platform is iOS
 XPLATFORM_ANDROID=no
 XPLATFORM_MINGW=no      # Whether target platform is MinGW (win32-g++*)
+XPLATFORM_MAEMO=no
 XPLATFORM_QNX=no
 XPLATFORM_HAIKU=no
 PLATFORM=$QMAKESPEC
@@ -2978,6 +2979,9 @@ fi
 case "$XPLATFORM" in
     *win32-g++*)
         XPLATFORM_MINGW=yes
+        ;;
+    *-maemo*)
+        XPLATFORM_MAEMO=yes
         ;;
     *qnx-*|*blackberry-*)
         XPLATFORM_QNX=yes

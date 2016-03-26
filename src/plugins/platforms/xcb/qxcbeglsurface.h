@@ -38,31 +38,33 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifndef QXCBWMSUPPORT_H
-#define QXCBWMSUPPORT_H
 
-#include "qxcbobject.h"
-#include "qxcbconnection.h"
-#include <qvector.h>
+#ifndef QXCBEGLSURFACE_H
+#define QXCBEGLSURFACE_H
+
+#include <EGL/egl.h>
 
 QT_BEGIN_NAMESPACE
 
-class QXcbWMSupport : public QXcbObject
+class QXcbEGLSurface
 {
 public:
-    QXcbWMSupport(QXcbConnection *c);
+    QXcbEGLSurface(EGLDisplay display, EGLSurface surface)
+        : m_display(display)
+        , m_surface(surface)
+    {
+    }
 
+    ~QXcbEGLSurface()
+    {
+        eglDestroySurface(m_display, m_surface);
+    }
 
-    bool isSupportedByWM(xcb_atom_t atom) const;
-    const QVector<xcb_window_t> &virtualRoots() const { return net_virtual_roots; }
+    EGLSurface surface() const { return m_surface; }
 
 private:
-    friend class QXcbConnection;
-    void updateNetWMAtoms();
-    void updateVirtualRoots();
-
-    QVector<xcb_atom_t> net_wm_atoms;
-    QVector<xcb_window_t> net_virtual_roots;
+    EGLDisplay m_display;
+    EGLSurface m_surface;
 };
 
 QT_END_NAMESPACE

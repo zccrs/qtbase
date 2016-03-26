@@ -38,33 +38,29 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifndef QXCBWMSUPPORT_H
-#define QXCBWMSUPPORT_H
+#ifndef CONTEXTKITPROPERTY_H
+#define CONTEXTKITPROPERTY_H
 
-#include "qxcbobject.h"
-#include "qxcbconnection.h"
-#include <qvector.h>
+#include <QDBusInterface>
 
-QT_BEGIN_NAMESPACE
-
-class QXcbWMSupport : public QXcbObject
+class QContextKitProperty : public QObject
 {
+    Q_OBJECT
 public:
-    QXcbWMSupport(QXcbConnection *c);
+    QContextKitProperty(const QString& serviceName, const QString& propertyName);
+    ~QContextKitProperty();
 
+    QVariant value() const;
 
-    bool isSupportedByWM(xcb_atom_t atom) const;
-    const QVector<xcb_window_t> &virtualRoots() const { return net_virtual_roots; }
+signals:
+    void valueChanged(const QVariant& value);
+
+private slots:
+    void cacheValue(const QVariantList& values, qulonglong);
 
 private:
-    friend class QXcbConnection;
-    void updateNetWMAtoms();
-    void updateVirtualRoots();
-
-    QVector<xcb_atom_t> net_wm_atoms;
-    QVector<xcb_window_t> net_virtual_roots;
+    QDBusInterface propertyInterface;
+    QVariant cachedValue;
 };
 
-QT_END_NAMESPACE
-
-#endif
+#endif // CONTEXTKITPROPERTY_H

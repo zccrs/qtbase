@@ -17,3 +17,5 @@ contains(QT_CONFIG, tslib) {
 contains(QT_CONFIG, libinput) {
     SUBDIRS += libinput
 }
+
+*-maemo*: SUBDIRS += meego

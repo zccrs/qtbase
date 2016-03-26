@@ -10,3 +10,7 @@ for(p, QMAKE_LIBDIR_EGL) {
 CONFIG -= qt
 
 LIBS += -lxcb -lX11 -lX11-xcb
+
+*-maemo {
+    DEFINES += SUPPORT_X11
+}

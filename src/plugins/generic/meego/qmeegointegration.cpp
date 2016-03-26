@@ -38,33 +38,44 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifndef QXCBWMSUPPORT_H
-#define QXCBWMSUPPORT_H
 
-#include "qxcbobject.h"
-#include "qxcbconnection.h"
-#include <qvector.h>
+#include "qmeegointegration.h"
 
-QT_BEGIN_NAMESPACE
+#include <QDebug>
+#include <QDBusConnection>
+#include <QDBusArgument>
+#include <qguiapplication.h>
+#include <qpa/qwindowsysteminterface.h>
 
-class QXcbWMSupport : public QXcbObject
+QMeeGoIntegration::QMeeGoIntegration()
+    : screenTopEdge(QStringLiteral("com.nokia.SensorService"), QStringLiteral("Screen.TopEdge"))
 {
-public:
-    QXcbWMSupport(QXcbConnection *c);
+    connect(&screenTopEdge, SIGNAL(valueChanged(QVariant)),
+            this, SLOT(updateScreenOrientation(QVariant)));
+    updateScreenOrientation(screenTopEdge.value());
+}
 
+QMeeGoIntegration::~QMeeGoIntegration()
+{
+}
 
-    bool isSupportedByWM(xcb_atom_t atom) const;
-    const QVector<xcb_window_t> &virtualRoots() const { return net_virtual_roots; }
+void QMeeGoIntegration::updateScreenOrientation(const QVariant& topEdgeValue)
+{
+    QString edge = topEdgeValue.toString();
+    Qt::ScreenOrientation orientation = Qt::PrimaryOrientation;
 
-private:
-    friend class QXcbConnection;
-    void updateNetWMAtoms();
-    void updateVirtualRoots();
+    // ### FIXME: This isn't perfect. We should obey the video_route (tv connected) and
+    // the keyboard slider.
 
-    QVector<xcb_atom_t> net_wm_atoms;
-    QVector<xcb_window_t> net_virtual_roots;
-};
+    if (edge == QLatin1String("top"))
+        orientation = Qt::LandscapeOrientation;
+    else if (edge == QLatin1String("left"))
+        orientation = Qt::PortraitOrientation;
+    else if (edge == QLatin1String("right"))
+        orientation = Qt::InvertedPortraitOrientation;
+    else if (edge == QLatin1String("bottom"))
+        orientation = Qt::InvertedLandscapeOrientation;
 
-QT_END_NAMESPACE
+    QWindowSystemInterface::handleScreenOrientationChange(QGuiApplication::primaryScreen(), orientation);
+}
 
-#endif

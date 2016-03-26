@@ -38,33 +38,20 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifndef QXCBWMSUPPORT_H
-#define QXCBWMSUPPORT_H
 
-#include "qxcbobject.h"
-#include "qxcbconnection.h"
-#include <qvector.h>
+#ifndef XLIBUTILS_H
+#define XLIBUTILS_H
+
+#ifdef XCB_USE_XLIB
+
+#include <xcb/xcb_keysyms.h>
+#include <QByteArray>
 
 QT_BEGIN_NAMESPACE
 
-class QXcbWMSupport : public QXcbObject
-{
-public:
-    QXcbWMSupport(QXcbConnection *c);
-
-
-    bool isSupportedByWM(xcb_atom_t atom) const;
-    const QVector<xcb_window_t> &virtualRoots() const { return net_virtual_roots; }
-
-private:
-    friend class QXcbConnection;
-    void updateNetWMAtoms();
-    void updateVirtualRoots();
-
-    QVector<xcb_atom_t> net_wm_atoms;
-    QVector<xcb_window_t> net_virtual_roots;
-};
+xcb_keysym_t q_XLookupString(void *display, xcb_window_t window, xcb_window_t root, uint state, xcb_keycode_t code, int type, QByteArray *chars);
 
 QT_END_NAMESPACE
 
+#endif // XCB_USE_XLIB
 #endif
