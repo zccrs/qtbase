@@ -451,7 +451,9 @@ public:
     bool hasXShape() const { return has_shape_extension; }
     bool hasXRandr() const { return has_randr_extension; }
     bool hasInputShape() const { return has_input_shape; }
-//    bool hasTouchWithoutMouseEmulation() const { return has_touch_without_mouse_emulation; }
+#if QT_VERSION <= QT_VERSION_CHECK(5, 4, 2)
+    bool hasTouchWithoutMouseEmulation() const { return has_touch_without_mouse_emulation; }
+#endif
     bool hasXKB() const { return has_xkb; }
 
     bool supportsThreadedRendering() const { return m_reader->isRunning(); }
@@ -625,7 +627,9 @@ private:
     bool has_shape_extension;
     bool has_randr_extension;
     bool has_input_shape;
-//    bool has_touch_without_mouse_emulation;
+#if QT_VERSION <= QT_VERSION_CHECK(5, 4, 2)
+    bool has_touch_without_mouse_emulation;
+#endif
     bool has_xkb;
     bool debug_xinput_devices;
     bool debug_xinput;

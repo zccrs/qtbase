@@ -325,7 +325,9 @@ QXcbConnection::QXcbConnection(QXcbNativeInterface *nativeInterface, bool canGra
     , has_shape_extension(false)
     , has_randr_extension(false)
     , has_input_shape(false)
-//    , has_touch_without_mouse_emulation(false)
+    #if QT_VERSION <= QT_VERSION_CHECK(5, 4, 2)
+    , has_touch_without_mouse_emulation(false)
+#endif
     , has_xkb(false)
     , debug_xinput_devices(false)
     , debug_xinput(false)
@@ -444,7 +446,11 @@ QXcbConnection::~QXcbConnection()
 
     // Delete screens in reverse order to avoid crash in case of multiple screens
     while (!m_screens.isEmpty())
+#if QT_VERSION > QT_VERSION_CHECK(5, 4, 2)
+        QXcbIntegration::instance()->destroyScreen(m_screens.takeLast());
+#else
         delete m_screens.takeLast();
+#endif
 
 #ifdef XCB_USE_EGL
     if (m_has_egl)

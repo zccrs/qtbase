@@ -107,6 +107,11 @@ public:
 #endif
 
     void sync();
+
+#if QT_VERSION > QT_VERSION_CHECK(5, 4, 2)
+    static QXcbIntegration *instance() { return m_instance; }
+#endif
+
 private:
     QList<QXcbConnection *> m_connections;
 
@@ -125,6 +130,10 @@ private:
 
     mutable QByteArray m_wmClass;
     const char *m_instanceName;
+
+#if QT_VERSION > QT_VERSION_CHECK(5, 4, 2)
+    static QXcbIntegration *m_instance;
+#endif
 };
 
 QT_END_NAMESPACE

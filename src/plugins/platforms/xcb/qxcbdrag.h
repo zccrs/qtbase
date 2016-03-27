@@ -82,8 +82,13 @@ public:
 
     void startDrag() Q_DECL_OVERRIDE;
     void cancel() Q_DECL_OVERRIDE;
+#if QT_VERSION < QT_VERSION_CHECK(5, 6, 0)
+    void move(const QMouseEvent *me) Q_DECL_OVERRIDE;
+    void drop(const QMouseEvent *me) Q_DECL_OVERRIDE;
+#else
     void move(const QPoint &globalPos) Q_DECL_OVERRIDE;
     void drop(const QPoint &globalPos) Q_DECL_OVERRIDE;
+#endif
     void endDrag() Q_DECL_OVERRIDE;
 
     void handleEnter(QWindow *window, const xcb_client_message_event_t *event);

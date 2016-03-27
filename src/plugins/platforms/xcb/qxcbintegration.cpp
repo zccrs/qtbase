@@ -124,10 +124,18 @@ static bool runningUnderDebugger()
 }
 #endif
 
+#if QT_VERSION > QT_VERSION_CHECK(5, 4, 2)
+    QXcbIntegration *QXcbIntegration::m_instance = Q_NULLPTR;
+#endif
+
 QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char **argv)
     : m_services(new QGenericUnixServices)
     , m_instanceName(0)
 {
+#if QT_VERSION > QT_VERSION_CHECK(5, 4, 2)
+    m_instance = this;
+#endif
+
     qRegisterMetaType<QXcbWindow*>();
 #ifdef XCB_USE_XLIB
     XInitThreads();
@@ -176,6 +184,9 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
 QXcbIntegration::~QXcbIntegration()
 {
     qDeleteAll(m_connections);
+#if QT_VERSION > QT_VERSION_CHECK(5, 4, 2)
+    m_instance = Q_NULLPTR;
+#endif
 }
 
 QPlatformWindow *QXcbIntegration::createPlatformWindow(QWindow *window) const
@@ -422,8 +433,10 @@ QVariant QXcbIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
         // TODO using various xcb, gnome or KDE settings
         break; // Not implemented, use defaults
     case QPlatformIntegration::FontSmoothingGamma:
+#if QT_VERSION > QT_VERSION_CHECK(5, 4, 0)
             // Match Qt 4.8 text rendering, and rendering of other X11 toolkits.
             return qreal(1.0);
+#endif
     case QPlatformIntegration::StartDragDistance: {
         // The default (in QPlatformTheme::defaultThemeHint) is 10 pixels, but
         // on a high-resolution screen it makes sense to increase it.
@@ -442,8 +455,14 @@ QVariant QXcbIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
         // X11 always has support for windows, but the
         // window manager could prevent it (e.g. matchbox)
         return false;
+#if QT_VERSION > QT_VERSION_CHECK(5, 4, 2)
     case QPlatformIntegration::ReplayMousePressOutsidePopup:
             return false;
+#else
+    case QPlatformIntegration::SynthesizeMouseFromTouchEvents:
+            // We do not want Qt to synthesize mouse events if X11 already does it.
+            return m_connections.at(0)->hasTouchWithoutMouseEmulation();
+#endif
     default:
         break;
     }

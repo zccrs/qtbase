@@ -46,12 +46,14 @@
 
 QT_BEGIN_NAMESPACE
 
-#define QXcbGlIntegrationFactoryInterface_iid "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3"
-
 class QXcbIntegrationPlugin : public QPlatformIntegrationPlugin
 {
    Q_OBJECT
-   Q_PLUGIN_METADATA(IID QXcbGlIntegrationFactoryInterface_iid FILE "xcb.json")
+#if QT_VERSION < QT_VERSION_CHECK(5, 5, 0)
+    Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.2" FILE "xcb.json")
+#else
+    Q_PLUGIN_METADATA(IID QPlatformIntegrationFactoryInterface_iid FILE "xcb.json")
+#endif
 public:
     QPlatformIntegration *create(const QString&, const QStringList&, int &, char **) Q_DECL_OVERRIDE;
 };

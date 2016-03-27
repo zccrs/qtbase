@@ -385,7 +385,11 @@ void QXcbScreen::handleScreenChange(xcb_randr_screen_change_notify_event_t *chan
     case XCB_RANDR_ROTATION_REFLECT_Y: break;
     }
 
-//    QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry());
+#if QT_VERSION <= QT_VERSION_CHECK(5, 3, 2)
+    QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry());
+#else
+    QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry(), availableGeometry());
+#endif
     QWindowSystemInterface::handleScreenOrientationChange(QPlatformScreen::screen(), m_orientation);
 
     QDpi ldpi = logicalDpi();
@@ -424,8 +428,11 @@ void QXcbScreen::updateGeometry(xcb_timestamp_t timestamp)
     }
     free(workArea);
 
-//    QWindowSystemInterface::handleScreenAvailableGeometryChange(QPlatformScreen::screen(), m_availableGeometry);
+#if QT_VERSION <= QT_VERSION_CHECK(5, 3, 2)
+    QWindowSystemInterface::handleScreenAvailableGeometryChange(QPlatformScreen::screen(), m_availableGeometry);
+#else
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), m_geometry, m_availableGeometry);
+#endif
 }
 
 void QXcbScreen::updateRefreshRate()

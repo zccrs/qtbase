@@ -298,9 +298,15 @@ xcb_window_t QXcbDrag::findRealWindow(const QPoint & pos, xcb_window_t w, int md
     return 0;
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 6, 0)
+void QXcbDrag::move(const QMouseEvent *me)
+{
+    QBasicDrag::move(me);
+    QPoint globalPos = me->globalPos();
+#else
 void QXcbDrag::move(const QPoint &globalPos)
 {
-//    QBasicDrag::move(me);
+#endif
 
     if (source_sameanswer.contains(globalPos) && source_sameanswer.isValid())
         return;
@@ -472,9 +478,15 @@ void QXcbDrag::move(const QPoint &globalPos)
     }
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 6, 0)
+void QXcbDrag::drop(const QMouseEvent *event)
+{
+    QBasicDrag::drop(event);
+#else
 void QXcbDrag::drop(const QPoint &globalPos)
 {
     QBasicDrag::drop(globalPos);
+#endif
 
     if (!current_target)
         return;
