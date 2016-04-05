@@ -1,31 +1,39 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
+**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,81 +55,56 @@
 
 QT_BEGIN_NAMESPACE
 
-QXcbVirtualDesktop::QXcbVirtualDesktop(QXcbConnection *connection, xcb_screen_t *screen, int number)
+QXcbScreen::QXcbScreen(QXcbConnection *connection, xcb_screen_t *scr,
+                       xcb_randr_get_output_info_reply_t *output, QString outputName, int number)
     : QXcbObject(connection)
-    , m_screen(screen)
-    , m_number(number)
-    , m_xSettings(Q_NULLPTR)
-{
-}
-
-QXcbVirtualDesktop::~QXcbVirtualDesktop()
-{
-    delete m_xSettings;
-}
-
-QXcbXSettings *QXcbVirtualDesktop::xSettings() const
-{
-    if (!m_xSettings) {
-        QXcbVirtualDesktop *self = const_cast<QXcbVirtualDesktop *>(this);
-        self->m_xSettings = new QXcbXSettings(self);
-    }
-    return m_xSettings;
-}
-
-QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDesktop,
-                       xcb_randr_output_t outputId, xcb_randr_get_output_info_reply_t *output,
-                       QString outputName)
-    : QXcbObject(connection)
-    , m_virtualDesktop(virtualDesktop)
-    , m_output(outputId)
+    , m_screen(scr)
     , m_crtc(output ? output->crtc : 0)
-    , m_mode(XCB_NONE)
-    , m_primary(false)
-    , m_rotation(XCB_RANDR_ROTATION_ROTATE_0)
     , m_outputName(outputName)
-    , m_outputSizeMillimeters(output ? QSize(output->mm_width, output->mm_height) : QSize())
-    , m_virtualSize(virtualDesktop->size())
-    , m_virtualSizeMillimeters(virtualDesktop->physicalSize())
+    , m_sizeMillimeters(output ? QSize(output->mm_width, output->mm_height) : QSize())
+    , m_virtualSize(scr->width_in_pixels, scr->height_in_pixels)
+    , m_virtualSizeMillimeters(scr->width_in_millimeters, scr->height_in_millimeters)
     , m_orientation(Qt::PrimaryOrientation)
+    , m_number(number)
     , m_refreshRate(60)
     , m_forcedDpi(-1)
-    , m_devicePixelRatio(1)
     , m_hintStyle(QFontEngine::HintStyle(-1))
-    , m_noFontHinting(false)
-    , m_subpixelType(QFontEngine::SubpixelAntialiasingType(-1))
-    , m_antialiasingEnabled(-1)
+    , m_xSettings(0)
 {
-    if (connection->hasXRandr()) {
+    if (connection->hasXRandr())
         xcb_randr_select_input(xcb_connection(), screen()->root, true);
-        xcb_randr_get_crtc_info_cookie_t crtcCookie =
-            xcb_randr_get_crtc_info_unchecked(xcb_connection(), m_crtc, output ? output->timestamp : 0);
-        xcb_randr_get_crtc_info_reply_t *crtc =
-            xcb_randr_get_crtc_info_reply(xcb_connection(), crtcCookie, NULL);
-        if (crtc) {
-            updateGeometry(QRect(crtc->x, crtc->y, crtc->width, crtc->height), crtc->rotation);
-            updateRefreshRate(crtc->mode);
-            free(crtc);
-        }
-    } else {
-        updateGeometry(output ? output->timestamp : 0);
-    }
 
-    const int dpr = int(devicePixelRatio());
-    if (m_geometry.isEmpty()) {
-        m_geometry = QRect(QPoint(), m_virtualSize/dpr);
-        m_nativeGeometry = QRect(QPoint(), m_virtualSize);
-    }
+    updateGeometry(output ? output->timestamp : 0);
+    updateRefreshRate();
+
+    // On VNC, it can be that physical size is unknown while
+    // virtual size is known (probably back-calculated from DPI and resolution)
+    if (m_sizeMillimeters.isEmpty())
+        m_sizeMillimeters = m_virtualSizeMillimeters;
+    if (m_geometry.isEmpty())
+        m_geometry = QRect(QPoint(), m_virtualSize);
     if (m_availableGeometry.isEmpty())
-        m_availableGeometry = m_geometry;
+        m_availableGeometry = QRect(QPoint(), m_virtualSize);
 
     readXResources();
 
-    // disable font hinting when we do UI scaling
-    static bool dpr_scaling_enabled = (qgetenv("QT_DEVICE_PIXEL_RATIO").toInt() > 1
-                           || qgetenv("QT_DEVICE_PIXEL_RATIO").toLower() == "auto");
-    if (dpr_scaling_enabled)
-        m_noFontHinting = true;
+
+#ifdef Q_XCB_DEBUG
+    qDebug();
+    qDebug("Screen output %s of xcb screen %d:", m_outputName.toUtf8().constData(), m_number);
+    qDebug("  width..........: %lf", m_sizeMillimeters.width());
+    qDebug("  height.........: %lf", m_sizeMillimeters.height());
+    qDebug("  geometry.......: %d x %d +%d +%d", m_geometry.width(), m_geometry.height(), m_geometry.x(), m_geometry.y());
+    qDebug("  virtual width..: %lf", m_virtualSizeMillimeters.width());
+    qDebug("  virtual height.: %lf", m_virtualSizeMillimeters.height());
+    qDebug("  virtual geom...: %d x %d", m_virtualSize.width(), m_virtualSize.height());
+    qDebug("  avail virt geom: %d x %d +%d +%d", m_availableGeometry.width(), m_availableGeometry.height(), m_availableGeometry.x(), m_availableGeometry.y());
+    qDebug("  depth..........: %d", screen()->root_depth);
+    qDebug("  white pixel....: %x", screen()->white_pixel);
+    qDebug("  black pixel....: %x", screen()->black_pixel);
+    qDebug("  refresh rate...: %d", m_refreshRate);
+    qDebug("  root ID........: %x", screen()->root);
+#endif
 
     QScopedPointer<xcb_get_window_attributes_reply_t, QScopedPointerPodDeleter> rootAttribs(
         xcb_get_window_attributes_reply(xcb_connection(),
@@ -157,6 +140,10 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
                                      atom(QXcbAtom::UTF8_STRING), 0, 1024), NULL);
             if (windowManagerReply && windowManagerReply->format == 8 && windowManagerReply->type == atom(QXcbAtom::UTF8_STRING)) {
                 m_windowManagerName = QString::fromUtf8((const char *)xcb_get_property_value(windowManagerReply), xcb_get_property_value_length(windowManagerReply));
+#ifdef Q_XCB_DEBUG
+                qDebug("  window manager.: %s", qPrintable(m_windowManagerName));
+                qDebug();
+#endif
             }
 
             free(windowManagerReply);
@@ -169,6 +156,38 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
         m_syncRequestSupported = false;
     else
         m_syncRequestSupported = true;
+
+    m_clientLeader = xcb_generate_id(xcb_connection());
+    Q_XCB_CALL2(xcb_create_window(xcb_connection(),
+                                  XCB_COPY_FROM_PARENT,
+                                  m_clientLeader,
+                                  screen()->root,
+                                  0, 0, 1, 1,
+                                  0,
+                                  XCB_WINDOW_CLASS_INPUT_OUTPUT,
+                                  screen()->root_visual,
+                                  0, 0), connection);
+#ifndef QT_NO_DEBUG
+    QByteArray ba("Qt client leader window for screen ");
+    ba += m_outputName.toUtf8();
+    Q_XCB_CALL2(xcb_change_property(xcb_connection(),
+                                   XCB_PROP_MODE_REPLACE,
+                                   m_clientLeader,
+                                   atom(QXcbAtom::_NET_WM_NAME),
+                                   atom(QXcbAtom::UTF8_STRING),
+                                   8,
+                                   ba.length(),
+                                   ba.constData()), connection);
+#endif
+
+    Q_XCB_CALL2(xcb_change_property(xcb_connection(),
+                                    XCB_PROP_MODE_REPLACE,
+                                    m_clientLeader,
+                                    atom(QXcbAtom::WM_CLIENT_LEADER),
+                                    XCB_ATOM_WINDOW,
+                                    32,
+                                    1,
+                                    &m_clientLeader), connection);
 
     xcb_depth_iterator_t depth_iterator =
         xcb_screen_allowed_depths_iterator(screen());
@@ -199,11 +218,10 @@ QXcbScreen::~QXcbScreen()
 
 QWindow *QXcbScreen::topLevelAt(const QPoint &p) const
 {
-    xcb_window_t root = screen()->root;
+    xcb_window_t root = m_screen->root;
 
-    int dpr = int(devicePixelRatio());
-    int x = p.x() / dpr;
-    int y = p.y() / dpr;
+    int x = p.x();
+    int y = p.y();
 
     xcb_window_t parent = root;
     xcb_window_t child = root;
@@ -235,43 +253,6 @@ QWindow *QXcbScreen::topLevelAt(const QPoint &p) const
     } while (parent != child);
 
     return 0;
-}
-
-
-QPoint QXcbScreen::mapToNative(const QPoint &pos) const
-{
-    const int dpr = int(devicePixelRatio());
-    return (pos - m_geometry.topLeft()) * dpr + m_nativeGeometry.topLeft();
-}
-
-QPoint QXcbScreen::mapFromNative(const QPoint &pos) const
-{
-    const int dpr = int(devicePixelRatio());
-    return (pos - m_nativeGeometry.topLeft()) / dpr + m_geometry.topLeft();
-}
-
-QPointF QXcbScreen::mapToNative(const QPointF &pos) const
-{
-    const int dpr = int(devicePixelRatio());
-    return (pos - m_geometry.topLeft()) * dpr + m_nativeGeometry.topLeft();
-}
-
-QPointF QXcbScreen::mapFromNative(const QPointF &pos) const
-{
-    const int dpr = int(devicePixelRatio());
-    return (pos - m_nativeGeometry.topLeft()) / dpr + m_geometry.topLeft();
-}
-
-QRect QXcbScreen::mapToNative(const QRect &rect) const
-{
-    const int dpr = int(devicePixelRatio());
-    return QRect(mapToNative(rect.topLeft()), rect.size() * dpr);
-}
-
-QRect QXcbScreen::mapFromNative(const QRect &rect) const
-{
-    const int dpr = int(devicePixelRatio());
-    return QRect(mapFromNative(rect.topLeft()), rect.size() / dpr);
 }
 
 void QXcbScreen::windowShown(QXcbWindow *window)
@@ -329,35 +310,13 @@ QImage::Format QXcbScreen::format() const
     return QImage::Format_RGB32;
 }
 
-QDpi QXcbScreen::virtualDpi() const
-{
-    return QDpi(Q_MM_PER_INCH * m_virtualSize.width() / m_virtualSizeMillimeters.width(),
-                Q_MM_PER_INCH * m_virtualSize.height() / m_virtualSizeMillimeters.height());
-}
-
 QDpi QXcbScreen::logicalDpi() const
 {
-    static const int overrideDpi = qEnvironmentVariableIntValue("QT_FONT_DPI");
-    if (overrideDpi)
-        return QDpi(overrideDpi, overrideDpi);
-
-    int primaryDpr = int(connection()->screens().at(0)->devicePixelRatio());
     if (m_forcedDpi > 0)
-        return QDpi(m_forcedDpi/primaryDpr, m_forcedDpi/primaryDpr);
-    QDpi vDpi = virtualDpi();
-    return QDpi(vDpi.first/primaryDpr, vDpi.second/primaryDpr);
-}
+        return QDpi(m_forcedDpi, m_forcedDpi);
 
-
-qreal QXcbScreen::devicePixelRatio() const
-{
-    static int override_dpr = qEnvironmentVariableIntValue("QT_DEVICE_PIXEL_RATIO");
-    static bool auto_dpr = qgetenv("QT_DEVICE_PIXEL_RATIO").toLower() == "auto";
-    if (override_dpr > 0)
-        return override_dpr;
-    if (auto_dpr)
-        return m_devicePixelRatio;
-    return 1.0;
+    return QDpi(Q_MM_PER_INCH * m_virtualSize.width() / m_virtualSizeMillimeters.width(),
+                Q_MM_PER_INCH * m_virtualSize.height() / m_virtualSizeMillimeters.height());
 }
 
 QPlatformCursor *QXcbScreen::cursor() const
@@ -389,14 +348,9 @@ QPlatformCursor *QXcbScreen::cursor() const
 */
 void QXcbScreen::handleScreenChange(xcb_randr_screen_change_notify_event_t *change_event)
 {
-    // No need to do anything when screen rotation did not change - if any
-    // xcb output geometry has changed, we will get RRCrtcChangeNotify and
-    // RROutputChangeNotify events next
-    if (change_event->rotation == m_rotation)
-        return;
+    updateGeometry(change_event->config_timestamp);
 
-    m_rotation = change_event->rotation;
-    switch (m_rotation) {
+    switch (change_event->rotation) {
     case XCB_RANDR_ROTATION_ROTATE_0: // xrandr --rotate normal
         m_orientation = Qt::LandscapeOrientation;
         m_virtualSize.setWidth(change_event->width);
@@ -431,68 +385,27 @@ void QXcbScreen::handleScreenChange(xcb_randr_screen_change_notify_event_t *chan
     case XCB_RANDR_ROTATION_REFLECT_Y: break;
     }
 
-    updateGeometry(change_event->timestamp);
-
+#if QT_VERSION <= QT_VERSION_CHECK(5, 3, 2)
+    QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry());
+#else
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry(), availableGeometry());
+#endif
     QWindowSystemInterface::handleScreenOrientationChange(QPlatformScreen::screen(), m_orientation);
 
     QDpi ldpi = logicalDpi();
     QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(QPlatformScreen::screen(), ldpi.first, ldpi.second);
-
-    // Windows which had null screens have already had expose events by now.
-    // They need to be told the screen is back, it's OK to render.
-    foreach (QWindow *window, QGuiApplication::topLevelWindows()) {
-        QXcbWindow *xcbWin = static_cast<QXcbWindow*>(window->handle());
-        if (xcbWin)
-            xcbWin->maybeSetScreen(this);
-    }
 }
 
 void QXcbScreen::updateGeometry(xcb_timestamp_t timestamp)
 {
-    if (!connection()->hasXRandr())
-        return;
-
-    xcb_randr_get_crtc_info_cookie_t crtcCookie =
-        xcb_randr_get_crtc_info_unchecked(xcb_connection(), m_crtc, timestamp);
-    xcb_randr_get_crtc_info_reply_t *crtc =
-        xcb_randr_get_crtc_info_reply(xcb_connection(), crtcCookie, NULL);
-    if (crtc) {
-        updateGeometry(QRect(crtc->x, crtc->y, crtc->width, crtc->height), crtc->rotation);
-        free(crtc);
-    }
-}
-
-void QXcbScreen::updateGeometry(const QRect &geom, uint8_t rotation)
-{
-    QRect xGeometry = geom;
-    QRect xAvailableGeometry = xGeometry;
-    switch (rotation) {
-    case XCB_RANDR_ROTATION_ROTATE_0: // xrandr --rotate normal
-        m_orientation = Qt::LandscapeOrientation;
-        m_sizeMillimeters = m_outputSizeMillimeters;
-        break;
-    case XCB_RANDR_ROTATION_ROTATE_90: // xrandr --rotate left
-        m_orientation = Qt::PortraitOrientation;
-        m_sizeMillimeters = m_outputSizeMillimeters.transposed();
-        break;
-    case XCB_RANDR_ROTATION_ROTATE_180: // xrandr --rotate inverted
-        m_orientation = Qt::InvertedLandscapeOrientation;
-        m_sizeMillimeters = m_outputSizeMillimeters;
-        break;
-    case XCB_RANDR_ROTATION_ROTATE_270: // xrandr --rotate right
-        m_orientation = Qt::InvertedPortraitOrientation;
-        m_sizeMillimeters = m_outputSizeMillimeters.transposed();
-        break;
-    }
-
-    // It can be that physical size is unknown while virtual size
-    // is known (probably back-calculated from DPI and resolution),
-    // e.g. on VNC or with some hardware.
-    if (m_sizeMillimeters.isEmpty()) {
-        QDpi dpi = virtualDpi();
-        m_sizeMillimeters = QSizeF(Q_MM_PER_INCH * xGeometry.width() / dpi.first,
-                                   Q_MM_PER_INCH * xGeometry.width() / dpi.second);
+    if (connection()->hasXRandr()) {
+        xcb_randr_get_crtc_info_reply_t *crtc = xcb_randr_get_crtc_info_reply(xcb_connection(),
+            xcb_randr_get_crtc_info_unchecked(xcb_connection(), m_crtc, timestamp), NULL);
+        if (crtc) {
+            m_geometry = QRect(crtc->x, crtc->y, crtc->width, crtc->height);
+            m_availableGeometry = m_geometry;
+            free(crtc);
+        }
     }
 
     xcb_get_property_reply_t * workArea =
@@ -511,48 +424,38 @@ void QXcbScreen::updateGeometry(const QRect &geom, uint8_t rotation)
         QRect virtualAvailableGeometry(geom[0], geom[1], geom[2], geom[3]);
         // Take the intersection of the desktop's available geometry with this screen's geometry
         // to get the part of the available geometry which belongs to this screen.
-        xAvailableGeometry = xGeometry & virtualAvailableGeometry;
+        m_availableGeometry = m_geometry & virtualAvailableGeometry;
     }
     free(workArea);
 
-    qreal dpi = xGeometry.width() / physicalSize().width() * qreal(25.4);
-    m_devicePixelRatio = qRound(dpi/96);
-    const int dpr = int(devicePixelRatio()); // we may override m_devicePixelRatio
-    m_geometry = QRect(xGeometry.topLeft(), xGeometry.size()/dpr);
-    m_nativeGeometry = QRect(xGeometry.topLeft(), xGeometry.size());
-    m_availableGeometry = QRect(mapFromNative(xAvailableGeometry.topLeft()), xAvailableGeometry.size()/dpr);
+#if QT_VERSION <= QT_VERSION_CHECK(5, 3, 2)
+    QWindowSystemInterface::handleScreenAvailableGeometryChange(QPlatformScreen::screen(), m_availableGeometry);
+#else
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), m_geometry, m_availableGeometry);
+#endif
 }
 
-void QXcbScreen::updateRefreshRate(xcb_randr_mode_t mode)
+void QXcbScreen::updateRefreshRate()
 {
     if (!connection()->hasXRandr())
         return;
 
-    if (m_mode == mode)
+    int rate = m_refreshRate;
+
+    xcb_randr_get_screen_info_reply_t *screenInfoReply =
+        xcb_randr_get_screen_info_reply(xcb_connection(), xcb_randr_get_screen_info_unchecked(xcb_connection(), m_screen->root), 0);
+
+    if (screenInfoReply) {
+        rate = screenInfoReply->rate;
+        free(screenInfoReply);
+    }
+
+    if (rate == m_refreshRate)
         return;
 
-    // we can safely use get_screen_resources_current here, because in order to
-    // get here, we must have called get_screen_resources before
-    xcb_randr_get_screen_resources_current_cookie_t resourcesCookie =
-        xcb_randr_get_screen_resources_current_unchecked(xcb_connection(), screen()->root);
-    xcb_randr_get_screen_resources_current_reply_t *resources =
-        xcb_randr_get_screen_resources_current_reply(xcb_connection(), resourcesCookie, NULL);
-    if (resources) {
-        xcb_randr_mode_info_iterator_t modesIter =
-            xcb_randr_get_screen_resources_current_modes_iterator(resources);
-        for (; modesIter.rem; xcb_randr_mode_info_next(&modesIter)) {
-            xcb_randr_mode_info_t *modeInfo = modesIter.data;
-            if (modeInfo->id == mode) {
-                m_refreshRate = modeInfo->dot_clock / (modeInfo->htotal * modeInfo->vtotal);
-                m_mode = mode;
-                break;
-            }
-        }
+    m_refreshRate = rate;
 
-        free(resources);
-        QWindowSystemInterface::handleScreenRefreshRateChange(QPlatformScreen::screen(), m_refreshRate);
-    }
+    QWindowSystemInterface::handleScreenRefreshRateChange(QPlatformScreen::screen(), rate);
 }
 
 QPixmap QXcbScreen::grabWindow(WId window, int x, int y, int width, int height) const
@@ -652,52 +555,32 @@ QPixmap QXcbScreen::grabWindow(WId window, int x, int y, int width, int height) 
     return result;
 }
 
-static bool parseXftInt(const QByteArray& stringValue, int *value)
-{
-    Q_ASSERT(value != 0);
-    bool ok;
-    *value = stringValue.toInt(&ok);
-    return ok;
-}
-
-static QFontEngine::HintStyle parseXftHintStyle(const QByteArray& stringValue)
-{
-    if (stringValue == "hintfull")
-        return QFontEngine::HintFull;
-    else if (stringValue == "hintnone")
-        return QFontEngine::HintNone;
-    else if (stringValue == "hintmedium")
-        return QFontEngine::HintMedium;
-    else if (stringValue == "hintslight")
-        return QFontEngine::HintLight;
-
-    return QFontEngine::HintStyle(-1);
-}
-
-static QFontEngine::SubpixelAntialiasingType parseXftRgba(const QByteArray& stringValue)
-{
-    if (stringValue == "none")
-        return QFontEngine::Subpixel_None;
-    else if (stringValue == "rgb")
-        return QFontEngine::Subpixel_RGB;
-    else if (stringValue == "bgr")
-        return QFontEngine::Subpixel_BGR;
-    else if (stringValue == "vrgb")
-        return QFontEngine::Subpixel_VRGB;
-    else if (stringValue == "vbgr")
-        return QFontEngine::Subpixel_VBGR;
-
-    return QFontEngine::SubpixelAntialiasingType(-1);
-}
-
 bool QXcbScreen::xResource(const QByteArray &identifier,
                            const QByteArray &expectedIdentifier,
-                           QByteArray& stringValue)
+                           int *value)
 {
+    Q_ASSERT(value != 0);
     if (identifier.startsWith(expectedIdentifier)) {
-        stringValue = identifier.mid(expectedIdentifier.size());
+        QByteArray stringValue = identifier.mid(expectedIdentifier.size());
+
+        bool ok;
+        *value = stringValue.toInt(&ok);
+        if (!ok) {
+            if (stringValue == "hintfull")
+                *value = QFontEngine::HintFull;
+            else if (stringValue == "hintnone")
+                *value = QFontEngine::HintNone;
+            else if (stringValue == "hintmedium")
+                *value = QFontEngine::HintMedium;
+            else if (stringValue == "hintslight")
+                *value = QFontEngine::HintLight;
+
+            return *value != 0;
+        }
+
         return true;
     }
+
     return false;
 }
 
@@ -729,67 +612,19 @@ void QXcbScreen::readXResources()
     for (int i = 0; i < split.size(); ++i) {
         const QByteArray &r = split.at(i);
         int value;
-        QByteArray stringValue;
-        if (xResource(r, "Xft.dpi:\t", stringValue)) {
-            if (parseXftInt(stringValue, &value))
-                m_forcedDpi = value;
-        } else if (xResource(r, "Xft.hintstyle:\t", stringValue)) {
-            m_hintStyle = parseXftHintStyle(stringValue);
-        } else if (xResource(r, "Xft.antialias:\t", stringValue)) {
-            if (parseXftInt(stringValue, &value))
-                m_antialiasingEnabled = value;
-        } else if (xResource(r, "Xft.rgba:\t", stringValue)) {
-            m_subpixelType = parseXftRgba(stringValue);
-        }
+        if (xResource(r, "Xft.dpi:\t", &value))
+            m_forcedDpi = value;
+        else if (xResource(r, "Xft.hintstyle:\t", &value))
+            m_hintStyle = QFontEngine::HintStyle(value);
     }
 }
 
 QXcbXSettings *QXcbScreen::xSettings() const
 {
-    return m_virtualDesktop->xSettings();
-}
-
-static inline void formatRect(QDebug &debug, const QRect r)
-{
-    debug << r.width() << 'x' << r.height()
-        << forcesign << r.x() << r.y() << noforcesign;
-}
-
-static inline void formatSizeF(QDebug &debug, const QSizeF s)
-{
-    debug << s.width() << 'x' << s.height() << "mm";
-}
-
-QDebug operator<<(QDebug debug, const QXcbScreen *screen)
-{
-    const QDebugStateSaver saver(debug);
-    debug.nospace();
-    debug << "QXcbScreen(" << (const void *)screen;
-    if (screen) {
-        debug << fixed << qSetRealNumberPrecision(1);
-        debug << ", name=" << screen->name();
-        debug << ", geometry=";
-        formatRect(debug, screen->geometry());
-        debug << ", availableGeometry=";
-        formatRect(debug, screen->availableGeometry());
-        debug << ", devicePixelRatio=" << screen->devicePixelRatio();
-        debug << ", logicalDpi=" << screen->logicalDpi();
-        debug << ", physicalSize=";
-        formatSizeF(debug, screen->physicalSize());
-        // TODO 5.6 if (debug.verbosity() > 2) {
-        debug << ", screenNumber=" << screen->screenNumber();
-        debug << ", virtualSize=" << screen->virtualSize().width() << "x" << screen->virtualSize().height() << " (";
-        formatSizeF(debug, screen->virtualSize());
-        debug << "), nativeGeometry=";
-        formatRect(debug, screen->nativeGeometry());
-        debug << ", orientation=" << screen->orientation();
-        debug << ", depth=" << screen->depth();
-        debug << ", refreshRate=" << screen->refreshRate();
-        debug << ", root=" << hex << screen->root();
-        debug << ", windowManagerName=" << screen->windowManagerName();
+    if (!m_xSettings) {
+        QXcbScreen *self = const_cast<QXcbScreen *>(this);
+        self->m_xSettings = new QXcbXSettings(self);
     }
-    debug << ')';
-    return debug;
+    return m_xSettings;
 }
-
 QT_END_NAMESPACE

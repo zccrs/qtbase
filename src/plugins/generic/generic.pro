@@ -13,3 +13,7 @@ SUBDIRS += tuiotouch
 contains(QT_CONFIG, libinput) {
     SUBDIRS += libinput
 }
+
+*-maemo* {
+    SUBDIRS += meego
+}

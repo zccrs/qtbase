@@ -39,19 +39,43 @@
 **
 ****************************************************************************/
 
-#ifndef XLIBUTILS_H
-#define XLIBUTILS_H
+#include "qmeegointegration.h"
 
-#ifdef XCB_USE_XLIB
+#include <QDebug>
+#include <QDBusConnection>
+#include <QDBusArgument>
+#include <qguiapplication.h>
+#include <qpa/qwindowsysteminterface.h>
 
-#include <xcb/xcb_keysyms.h>
-#include <QByteArray>
+QMeeGoIntegration::QMeeGoIntegration()
+    : screenTopEdge(QStringLiteral("com.nokia.SensorService"), QStringLiteral("Screen.TopEdge"))
+{
+    connect(&screenTopEdge, SIGNAL(valueChanged(QVariant)),
+            this, SLOT(updateScreenOrientation(QVariant)));
+    updateScreenOrientation(screenTopEdge.value());
+}
 
-QT_BEGIN_NAMESPACE
+QMeeGoIntegration::~QMeeGoIntegration()
+{
+}
 
-xcb_keysym_t q_XLookupString(void *display, xcb_window_t window, xcb_window_t root, uint state, xcb_keycode_t code, int type, QByteArray *chars);
+void QMeeGoIntegration::updateScreenOrientation(const QVariant& topEdgeValue)
+{
+    QString edge = topEdgeValue.toString();
+    Qt::ScreenOrientation orientation = Qt::PrimaryOrientation;
 
-QT_END_NAMESPACE
+    // ### FIXME: This isn't perfect. We should obey the video_route (tv connected) and
+    // the keyboard slider.
 
-#endif // XCB_USE_XLIB
-#endif
+    if (edge == QLatin1String("top"))
+        orientation = Qt::LandscapeOrientation;
+    else if (edge == QLatin1String("left"))
+        orientation = Qt::PortraitOrientation;
+    else if (edge == QLatin1String("right"))
+        orientation = Qt::InvertedPortraitOrientation;
+    else if (edge == QLatin1String("bottom"))
+        orientation = Qt::InvertedLandscapeOrientation;
+
+    QWindowSystemInterface::handleScreenOrientationChange(QGuiApplication::primaryScreen(), orientation);
+}
+

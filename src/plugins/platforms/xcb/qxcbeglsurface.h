@@ -39,19 +39,34 @@
 **
 ****************************************************************************/
 
-#ifndef XLIBUTILS_H
-#define XLIBUTILS_H
+#ifndef QXCBEGLSURFACE_H
+#define QXCBEGLSURFACE_H
 
-#ifdef XCB_USE_XLIB
-
-#include <xcb/xcb_keysyms.h>
-#include <QByteArray>
+#include <EGL/egl.h>
 
 QT_BEGIN_NAMESPACE
 
-xcb_keysym_t q_XLookupString(void *display, xcb_window_t window, xcb_window_t root, uint state, xcb_keycode_t code, int type, QByteArray *chars);
+class QXcbEGLSurface
+{
+public:
+    QXcbEGLSurface(EGLDisplay display, EGLSurface surface)
+        : m_display(display)
+        , m_surface(surface)
+    {
+    }
+
+    ~QXcbEGLSurface()
+    {
+        eglDestroySurface(m_display, m_surface);
+    }
+
+    EGLSurface surface() const { return m_surface; }
+
+private:
+    EGLDisplay m_display;
+    EGLSurface m_surface;
+};
 
 QT_END_NAMESPACE
 
-#endif // XCB_USE_XLIB
 #endif

@@ -1,31 +1,39 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
+**
 **
 ** $QT_END_LICENSE$
 **
@@ -117,9 +125,9 @@ public:
     ~QXcbDropData();
 
 protected:
-    bool hasFormat_sys(const QString &mimeType) const Q_DECL_OVERRIDE;
-    QStringList formats_sys() const Q_DECL_OVERRIDE;
-    QVariant retrieveData_sys(const QString &mimeType, QVariant::Type type) const Q_DECL_OVERRIDE;
+    bool hasFormat_sys(const QString &mimeType) const;
+    QStringList formats_sys() const;
+    QVariant retrieveData_sys(const QString &mimeType, QVariant::Type type) const;
 
     QVariant xdndObtainData(const QByteArray &format, QVariant::Type requestedType) const;
 
@@ -234,16 +242,9 @@ xcb_window_t QXcbDrag::findRealWindow(const QPoint & pos, xcb_window_t w, int md
         if (reply->map_state != XCB_MAP_STATE_VIEWABLE)
             return 0;
 
-        free(reply);
-
         xcb_get_geometry_cookie_t gcookie = xcb_get_geometry(xcb_connection(), w);
         xcb_get_geometry_reply_t *greply = xcb_get_geometry_reply(xcb_connection(), gcookie, 0);
-        if (!greply)
-            return 0;
-
-        QRect windowRect(greply->x, greply->y, greply->width, greply->height);
-        free(greply);
-        if (windowRect.contains(pos)) {
+        if (reply && QRect(greply->x, greply->y, greply->width, greply->height).contains(pos)) {
             bool windowContainsMouse = !ignoreNonXdndAwareWindows;
             {
                 xcb_get_property_cookie_t cookie =
@@ -254,7 +255,7 @@ xcb_window_t QXcbDrag::findRealWindow(const QPoint & pos, xcb_window_t w, int md
                 bool isAware = reply && reply->type != XCB_NONE;
                 free(reply);
                 if (isAware) {
-                    const QPoint relPos = pos - windowRect.topLeft();
+                    const QPoint relPos = pos - QPoint(greply->x, greply->y);
                     // When ShapeInput and ShapeBounding are not set they return a single rectangle with the geometry of the window, this is why we
                     // need to check both here so that in the case one is set and the other is not we still get the correct result.
                     if (connection()->hasInputShape())
@@ -278,7 +279,7 @@ xcb_window_t QXcbDrag::findRealWindow(const QPoint & pos, xcb_window_t w, int md
 
             xcb_window_t r = 0;
             for (uint i = nc; !r && i--;)
-                r = findRealWindow(pos - windowRect.topLeft(), c[i], md-1, ignoreNonXdndAwareWindows);
+                r = findRealWindow(pos - QPoint(greply->x, greply->y), c[i], md-1, ignoreNonXdndAwareWindows);
 
             free(reply);
             if (r)
@@ -297,21 +298,21 @@ xcb_window_t QXcbDrag::findRealWindow(const QPoint & pos, xcb_window_t w, int md
     return 0;
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 6, 0)
 void QXcbDrag::move(const QMouseEvent *me)
 {
-    // The mouse event is in the coordinate system of the window that started the drag.
-    // We do not know which window that was at this point, so we just use the device pixel ratio
-    // of the QGuiApplication. This will break once we support screens with different DPR. Fixing
-    // this properly requires some redesign of the drag and drop architecture.
-    static const int dpr = int(qApp->devicePixelRatio());
     QBasicDrag::move(me);
     QPoint globalPos = me->globalPos();
+#else
+void QXcbDrag::move(const QPoint &globalPos)
+{
+#endif
 
     if (source_sameanswer.contains(globalPos) && source_sameanswer.isValid())
         return;
 
     const QList<QXcbScreen *> &screens = connection()->screens();
-    QXcbScreen *screen = connection()->primaryScreen();
+    QXcbScreen *screen = screens.at(connection()->primaryScreen());
     for (int i = 0; i < screens.size(); ++i) {
         if (screens.at(i)->geometry().contains(globalPos)) {
             screen = screens.at(i);
@@ -340,7 +341,7 @@ void QXcbDrag::move(const QMouseEvent *me)
 //    qt_xdnd_current_screen = screen;
     xcb_window_t rootwin = current_screen->root();
     xcb_translate_coordinates_reply_t *translate =
-            ::translateCoordinates(connection(), rootwin, rootwin, globalPos.x() * dpr, globalPos.y() * dpr);
+            ::translateCoordinates(connection(), rootwin, rootwin, globalPos.x(), globalPos.y());
     if (!translate)
         return;
 
@@ -405,7 +406,7 @@ void QXcbDrag::move(const QMouseEvent *me)
     int target_version = 1;
 
     if (proxy_target) {
-        xcb_get_property_cookie_t cookie = xcb_get_property(xcb_connection(), false, proxy_target,
+        xcb_get_property_cookie_t cookie = xcb_get_property(xcb_connection(), false, target,
                                                             atom(QXcbAtom::XdndAware), XCB_GET_PROPERTY_TYPE_ANY, 0, 1);
         xcb_get_property_reply_t *reply = xcb_get_property_reply(xcb_connection(), cookie, 0);
         if (!reply || reply->type == XCB_NONE)
@@ -463,7 +464,7 @@ void QXcbDrag::move(const QMouseEvent *me)
         move.type = atom(QXcbAtom::XdndPosition);
         move.data.data32[0] = connection()->clipboard()->owner();
         move.data.data32[1] = 0; // flags
-        move.data.data32[2] = (globalPos.x() * dpr << 16) + globalPos.y() * dpr;
+        move.data.data32[2] = (globalPos.x() << 16) + globalPos.y();
         move.data.data32[3] = connection()->time();
         move.data.data32[4] = toXdndAction(defaultAction(currentDrag()->supportedActions(), QGuiApplication::keyboardModifiers()));
         DEBUG() << "sending Xdnd position source=" << move.data.data32[0] << "target=" << move.window;
@@ -477,9 +478,15 @@ void QXcbDrag::move(const QMouseEvent *me)
     }
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 6, 0)
 void QXcbDrag::drop(const QMouseEvent *event)
 {
     QBasicDrag::drop(event);
+#else
+void QXcbDrag::drop(const QPoint &globalPos)
+{
+    QBasicDrag::drop(globalPos);
+#endif
 
     if (!current_target)
         return;
@@ -709,9 +716,7 @@ void QXcbDrag::handle_xdnd_position(QWindow *w, const xcb_client_message_event_t
     QPoint p((e->data.data32[2] & 0xffff0000) >> 16, e->data.data32[2] & 0x0000ffff);
     Q_ASSERT(w);
     QRect geometry = w->geometry();
-    const int dpr = int(w->handle()->devicePixelRatio());
 
-    p /= dpr;
     p -= geometry.topLeft();
 
     if (!w || (w->type() == Qt::Desktop))
@@ -830,12 +835,10 @@ void QXcbDrag::handle_xdnd_status(const xcb_client_message_event_t *event)
         updateCursor(Qt::IgnoreAction);
     }
 
-    static const int dpr = int(qApp->devicePixelRatio());
-
     if ((event->data.data32[1] & 2) == 0) {
         QPoint p((event->data.data32[2] & 0xffff0000) >> 16, event->data.data32[2] & 0x0000ffff);
         QSize s((event->data.data32[3] & 0xffff0000) >> 16, event->data.data32[3] & 0x0000ffff);
-        source_sameanswer = QRect(p / dpr, s / dpr);
+        source_sameanswer = QRect(p, s);
     } else {
         source_sameanswer = QRect();
     }
@@ -999,8 +1002,6 @@ void QXcbDrag::handleFinished(const xcb_client_message_event_t *event)
         if (at != -1) {
 
             Transaction t = transactions.takeAt(at);
-            if (t.drag)
-                t.drag->deleteLater();
 //            QDragManager *manager = QDragManager::self();
 
 //            Window target = current_target;
@@ -1019,6 +1020,9 @@ void QXcbDrag::handleFinished(const xcb_client_message_event_t *event)
 //            current_embedding_widget = 0;
 //            current_target = 0;
 //            current_proxy_target = 0;
+
+            if (t.drag)
+                t.drag->deleteLater();
 
 //            current_target = target;
 //            current_proxy_target = proxy_target;
@@ -1186,11 +1190,6 @@ bool QXcbDrag::dndEnable(QXcbWindow *w, bool on)
         }
         return true;
     }
-}
-
-bool QXcbDrag::ownsDragObject() const
-{
-    return true;
 }
 
 QXcbDropData::QXcbDropData(QXcbDrag *d)

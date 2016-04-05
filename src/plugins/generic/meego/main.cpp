@@ -39,19 +39,34 @@
 **
 ****************************************************************************/
 
-#ifndef XLIBUTILS_H
-#define XLIBUTILS_H
+#include <QtGui/qgenericplugin.h>
+#include <QDebug>
 
-#ifdef XCB_USE_XLIB
-
-#include <xcb/xcb_keysyms.h>
-#include <QByteArray>
+#include "qmeegointegration.h"
 
 QT_BEGIN_NAMESPACE
 
-xcb_keysym_t q_XLookupString(void *display, xcb_window_t window, xcb_window_t root, uint state, xcb_keycode_t code, int type, QByteArray *chars);
+class QMeeGoIntegrationPlugin : public QGenericPlugin
+{
+    Q_PLUGIN_METADATA(IID QGenericPluginFactoryInterface_iid FILE "meego.json")
+public:
+    QMeeGoIntegrationPlugin();
+
+    QObject* create(const QString &key, const QString &specification);
+};
+
+QMeeGoIntegrationPlugin::QMeeGoIntegrationPlugin()
+    : QGenericPlugin()
+{
+}
+
+QObject* QMeeGoIntegrationPlugin::create(const QString &key, const QString &specification)
+{
+    qDebug() << "meego create>>>>>>>>>>>>>>>>>>>>>>>" << key << specification;
+
+    if (!key.compare(QLatin1String("MeeGoIntegration"), Qt::CaseInsensitive))
+        return new QMeeGoIntegration();
+    return 0;
+}
 
 QT_END_NAMESPACE
-
-#endif // XCB_USE_XLIB
-#endif

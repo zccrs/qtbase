@@ -39,19 +39,47 @@
 **
 ****************************************************************************/
 
-#ifndef XLIBUTILS_H
-#define XLIBUTILS_H
+#include "contextkitproperty.h"
 
-#ifdef XCB_USE_XLIB
+#include <QDBusReply>
+#include <QDebug>
 
-#include <xcb/xcb_keysyms.h>
-#include <QByteArray>
+static QString objectPathForProperty(const QString& property)
+{
+    QString path = property;
+    if (!path.startsWith(QLatin1Char('/'))) {
+        path.replace(QLatin1Char('.'), QLatin1Char('/'));
+        path.prepend(QLatin1String("/org/maemo/contextkit/"));
+    }
+    return path;
+}
 
-QT_BEGIN_NAMESPACE
+QContextKitProperty::QContextKitProperty(const QString& serviceName, const QString& propertyName)
+    : propertyInterface(serviceName, objectPathForProperty(propertyName),
+                        QLatin1String("org.maemo.contextkit.Property"), QDBusConnection::systemBus())
+{
+    propertyInterface.call("Subscribe");
+    connect(&propertyInterface, SIGNAL(ValueChanged(QVariantList,qulonglong)),
+            this, SLOT(cacheValue(QVariantList,qulonglong)));
 
-xcb_keysym_t q_XLookupString(void *display, xcb_window_t window, xcb_window_t root, uint state, xcb_keycode_t code, int type, QByteArray *chars);
+    QDBusMessage reply = propertyInterface.call("Get");
+    if (reply.type() == QDBusMessage::ReplyMessage)
+        cachedValue = qdbus_cast<QList<QVariant> >(reply.arguments().value(0)).value(0);
+}
 
-QT_END_NAMESPACE
+QContextKitProperty::~QContextKitProperty()
+{
+    propertyInterface.call("Unsubscribe");
+}
 
-#endif // XCB_USE_XLIB
-#endif
+QVariant QContextKitProperty::value() const
+{
+    return cachedValue;
+}
+
+void QContextKitProperty::cacheValue(const QVariantList& values, qulonglong)
+{
+    cachedValue = values.value(0);
+    emit valueChanged(cachedValue);
+}
+

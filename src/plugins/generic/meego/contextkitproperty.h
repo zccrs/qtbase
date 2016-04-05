@@ -38,20 +38,29 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
+#ifndef CONTEXTKITPROPERTY_H
+#define CONTEXTKITPROPERTY_H
 
-#ifndef XLIBUTILS_H
-#define XLIBUTILS_H
+#include <QDBusInterface>
 
-#ifdef XCB_USE_XLIB
+class QContextKitProperty : public QObject
+{
+    Q_OBJECT
+public:
+    QContextKitProperty(const QString& serviceName, const QString& propertyName);
+    ~QContextKitProperty();
 
-#include <xcb/xcb_keysyms.h>
-#include <QByteArray>
+    QVariant value() const;
 
-QT_BEGIN_NAMESPACE
+signals:
+    void valueChanged(const QVariant& value);
 
-xcb_keysym_t q_XLookupString(void *display, xcb_window_t window, xcb_window_t root, uint state, xcb_keycode_t code, int type, QByteArray *chars);
+private slots:
+    void cacheValue(const QVariantList& values, qulonglong);
 
-QT_END_NAMESPACE
+private:
+    QDBusInterface propertyInterface;
+    QVariant cachedValue;
+};
 
-#endif // XCB_USE_XLIB
-#endif
+#endif // CONTEXTKITPROPERTY_H

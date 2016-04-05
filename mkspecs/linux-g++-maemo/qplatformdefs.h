@@ -3,7 +3,7 @@
 ** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
-** This file is part of the plugins of the Qt Toolkit.
+** This file is part of the qmake spec of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
@@ -39,19 +39,15 @@
 **
 ****************************************************************************/
 
-#ifndef XLIBUTILS_H
-#define XLIBUTILS_H
+#include "../linux-arm-gnueabi-g++/qplatformdefs.h"
 
-#ifdef XCB_USE_XLIB
+#define QT_GUI_DOUBLE_CLICK_RADIUS 20
+#define QT_GUI_DRAG_DISTANCE 16
 
-#include <xcb/xcb_keysyms.h>
-#include <QByteArray>
+#define QML_FLICK_OVERSHOOT 160
+#define QML_FLICK_SAMPLEBUFFER 6
+#define QML_FLICK_DISCARDSAMPLES 2
+#define QML_FLICK_DEFAULTMAXVELOCITY 2500
+#define QML_FLICK_DEFAULTDECELERATION 2000
+#define QML_FLICK_OVERSHOOTFRICTION 10
 
-QT_BEGIN_NAMESPACE
-
-xcb_keysym_t q_XLookupString(void *display, xcb_window_t window, xcb_window_t root, uint state, xcb_keycode_t code, int type, QByteArray *chars);
-
-QT_END_NAMESPACE
-
-#endif // XCB_USE_XLIB
-#endif
